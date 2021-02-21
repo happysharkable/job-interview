@@ -1,0 +1,60 @@
+1. 
+
+SELECT m.title, s.begin_time, m.duration, 
+        o.overlapse_title AS title, o.overlapse_begin_time AS begin_time, o.overlapse_duration AS duration
+FROM cinema.seances s JOIN cinema.movies m ON (s.movie_id = m.id),
+    (
+        SELECT s1.id AS overlapse_id, m1.title AS overlapse_title, s1.begin_time AS overlapse_begin_time, m1.duration AS overlapse_duration 
+        FROM cinema.seances s1
+        JOIN cinema.movies m1 ON (s1.movie_id = m1.id)
+    ) o
+WHERE ADDTIME(s.begin_time, m.duration) > o.overlapse_begin_time AND s.id < o.overlapse_id
+ORDER BY ADDTIME(s.begin_time, m.duration) - o.overlapse_begin_time, s.begin_time;
+
+2. 
+
+SELECT m.title, s.begin_time, m.duration, 
+        o.overlapse_title AS title, o.overlapse_begin_time AS begin_time, o.overlapse_duration AS duration,
+        MINUTE(TIMEDIFF(ADDTIME(s.begin_time, m.duration), o.overlapse_begin_time)) AS timeout
+FROM cinema.seances s JOIN cinema.movies m ON (s.movie_id = m.id),
+    (
+        SELECT s1.id AS overlapse_id, m1.title AS overlapse_title, s1.begin_time AS overlapse_begin_time, m1.duration AS overlapse_duration 
+        FROM cinema.seances s1
+        JOIN cinema.movies m1 ON (s1.movie_id = m1.id)
+    ) o
+WHERE o.overlapse_id - s.id = 1 AND MINUTE(TIMEDIFF(ADDTIME(s.begin_time, m.duration), o.overlapse_begin_time)) >= 30
+ORDER BY timeout;
+
+3.
+
+SELECT * FROM 
+    (
+    SELECT m.id, m.title, SUM(1) AS tickets, CEILING(COUNT(1)/COUNT(DISTINCT(t.seance_id))) AS average, SUM(s.price) AS revenue
+    FROM cinema.movies m
+    JOIN cinema.seances s ON (s.movie_id = m.id)
+    JOIN cinema.tickets t ON (t.seance_id = s.id)
+    GROUP BY m.id
+    ORDER BY revenue
+    ) data_table
+    
+UNION
+
+SELECT 'TOTAL', '', SUM(tickets), SUM(average), SUM(revenue) FROM 
+    (
+    SELECT m.id, m.title, SUM(1) AS tickets, CEILING(COUNT(1)/COUNT(DISTINCT(t.seance_id))) AS average, SUM(s.price) AS revenue
+    FROM cinema.movies m
+    JOIN cinema.seances s ON (s.movie_id = m.id)
+    JOIN cinema.tickets t ON (t.seance_id = s.id)
+    GROUP BY m.id
+    ) total_row;
+
+4.
+
+SET @begin_time_value := '2020-02-21 09:00';
+
+SELECT @begin_time_value AS begin_time, ADDTIME(@begin_time_value, '03:00:00') AS end_time, SUM(result_set.tickets) AS total_tickets, SUM(result_set.revenue) AS total_revenue FROM (
+    SELECT s.id, COUNT(1) AS tickets, SUM(s.price) AS revenue FROM cinema.seances s
+    JOIN cinema.tickets t ON (t.seance_id = s.id)
+    WHERE s.begin_time >= @begin_time_value AND s.begin_time < ADDTIME(@begin_time_value, '03:00:00')
+    GROUP BY s.id
+   ) result_set
